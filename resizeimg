@@ -1,0 +1,118 @@
+#!/bin/bash
+
+#Copyright 2017 Mikkel Jeppesen
+#Permission is hereby granted, free of charge, 
+#to any person obtaining a copy of this software 
+#and associated documentation files (the "Software"), 
+#to deal in the Software without restriction, 
+#including without limitation the rights to use, copy, 
+#modify, merge, publish, distribute, sublicense, 
+#and/or sell copies of the Software, and to permit 
+#persons to whom the Software is furnished to do so, 
+#subject to the following conditions:
+#
+#The above copyright notice and this permission notice 
+#shall be included in all copies or substantial portions 
+#of the Software.
+#
+#THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, 
+#EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO 
+#THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR 
+#PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS 
+#OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, 
+#DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, 
+#TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH 
+#THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+# Check that the required arguments have been passed
+if (( $# != 2 ))
+then
+  echo "Usage: resizeimg <DEVICE> <OUTPUTFILE> The script has to be run as root"
+  exit 1
+fi
+
+if [[ $EUID -ne 0 ]]; then
+  echo "You must be a root user" 2>&1
+  exit 1
+fi
+
+# Unmount the SD volumes
+umount $1?*
+
+# Make an image of the sdcard
+echo "Making an image of the SDcard. hold tight this might take a while"
+
+if command -v dcfldd >/dev/null; then
+  dcfldd if=$1 of=$2 
+else
+  dd if=$1 of=$2
+fi
+
+sync
+
+# Change ownership of the current user.
+chown $(who mom likes | awk {'print $1'}):$(who mom likes | awk {'print $1'}) $2
+
+# Get start of partition information
+start=$(sudo fdisk -lo sectors,start $2 | awk '/Sectors.*Start/{f=1; next} f && $1+0 > sectors {sectors = $1; start = $2 } END { print start }')
+
+# Set up the ext4 partition of the image on the loopback device
+losetup -d /dev/loop0
+losetup /dev/loop0 $2 -o $(($start*512))
+
+# Get used space information 
+newSize=$(sudo dumpe2fs -h /dev/loop0 | awk '/Block count:/{blockcount=$3} /Block size:/{blocksize=$3} /Free blocks:/{freeblocks=$3} END{print int((((blockcount-freeblocks)*blocksize)/1024/1024)+50)"M"}')
+
+# Resize the ext4 partition to the newSize
+if resize2fs -p /dev/loop0 $newSize; then
+  echo ""
+else
+  echo "resize2fs failed. If it's complaining, you can try and force it." 
+  read -p "Want to force resize the copy? Your SD is never written to during this script [Y/n]" -n 1 -r
+  if [[ $REPLY =~ ^[Yy]$ ]]
+  then
+    resize2fs -fp /dev/loop0 $newSize
+  else
+    exit 1
+  fi
+fi
+
+losetup -d /dev/loop0
+losetup /dev/loop0 $2
+
+# to create the partitions programatically (rather than manually)
+# we're going to simulate the manual input to fdisk
+# The sed script strips off all the comments so that we can 
+# document what we're doing in-line with the actual commands
+# Note that a blank line (commented as "defualt" will send a empty
+# line terminated with a newline to take the fdisk default.
+sed -e 's/\s*\([\+0-9a-zA-Z]*\).*/\1/' << EOF | fdisk /dev/loop0
+  d # Delete a partition table
+  2 # Second partition table
+  n # New partition
+  p # Primary partition
+  2 # Partition number 2 
+  $start # new partition
+  +$newSize # the size we shrink the new partition to
+  w # write changes to disk
+  q # and we're done
+EOF
+
+# Trimming the image file down to the new size
+end=$(sudo fdisk -lo sectors,end $2 | awk '/Sectors.*End/{f=1; next} f && $1+0 > sectors {sectors = $1; end = $2 } END { print end }')
+losetup -d /dev/loop0
+truncate -s $((($end+1)*512)) $2
+
+# Getting extra marks (Filling the extra 50MB with 0 to make compression better)
+losetup /dev/loop0 $2 -o $(($start*512))
+mkdir -p /mnt/imageroot
+mount /dev/loop0 /mnt/imageroot
+dd if=/dev/zero of=/mnt/imageroot/zero.txt
+rm /mnt/imageroot/zero.txt
+umount /mnt/imageroot
+rmdir /mnt/imageroot
+losetup -d /dev/loop0
+
+echo "DONE"
+
+exit 0
