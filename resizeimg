@@ -27,7 +27,7 @@
 # Check that the required arguments have been passed
 if (( $# != 2 ))
 then
-  echo "Usage: resizeimg <DEVICE> <OUTPUTFILE> The script has to be run as root"
+  echo -e "Usage: ./$0 <DEVICE> <OUTPUTFILE>\nThe script has to be run as root"
   exit 1
 fi
 
@@ -80,11 +80,11 @@ fi
 losetup -d /dev/loop0
 losetup /dev/loop0 $2
 
-# to create the partitions programatically (rather than manually)
+# To create the partitions programatically (rather than manually)
 # we're going to simulate the manual input to fdisk
 # The sed script strips off all the comments so that we can 
 # document what we're doing in-line with the actual commands
-# Note that a blank line (commented as "defualt" will send a empty
+# Note that a blank line (commented as "default" will send an empty
 # line terminated with a newline to take the fdisk default.
 sed -e 's/\s*\([\+0-9a-zA-Z]*\).*/\1/' << EOF | fdisk /dev/loop0
   d # Delete a partition table
