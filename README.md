@@ -8,3 +8,4 @@ Example
 
     sudo ./resizeimg /dev/mmcblk0 /home/mikkel/test.img
     
+Video explaining the script: https://www.youtube.com/watch?v=1lLwL5yz_k8
