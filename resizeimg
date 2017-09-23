@@ -107,7 +107,7 @@ truncate -s $((($end+1)*512)) $2
 losetup /dev/loop0 $2 -o $(($start*512))
 mkdir -p /mnt/imageroot
 mount /dev/loop0 /mnt/imageroot
-dd if=/dev/zero of=/mnt/imageroot/zero.txt /dev/null 2>&1
+dd if=/dev/zero of=/mnt/imageroot/zero.txt > /dev/null 2>&1
 rm /mnt/imageroot/zero.txt
 umount /mnt/imageroot
 rmdir /mnt/imageroot
