@@ -51,7 +51,7 @@ fi
 sync
 
 # Change ownership of the current user.
-chown $(who mom likes | awk {'print $1'}):$(who mom likes | awk {'print $1'}) $2
+chown $(whoami):$(whoami) $2
 
 # Get start of partition information
 start=$(sudo fdisk -lo sectors,start $2 | awk '/Sectors.*Start/{f=1; next} f && $1+0 > sectors {sectors = $1; start = $2 } END { print start }')
